@@ -1,7 +1,19 @@
-import qrcode from 'qrcode';
+import qrcode, { type QRCodeToBufferOptions, type QRCodeToDataURLOptions } from 'qrcode';
 import { z } from 'zod';
+import { Jimp } from 'jimp';
 
 type PointOfInitMethod = 'static' | 'dynamic';
+
+type QrCodeLogoOptions = {
+  src: string;
+  text?: string;
+  backgroundColor?: string;
+  size?: {
+    w?: number;
+    h?: number;
+  };
+  position?: 'center' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+};
 
 // Zod schema for validation
 const VietQrSchema = z.object({
@@ -335,18 +347,47 @@ class VietQr {
    * Generates the QR code string
    * @returns The complete QR code string
    */
-  public getQr(): string {
+  public getQrContent(): string {
     const content = [VietQr.PFI, this.initMethod, this.accInfo, VietQr.CURR, this.txAmt, VietQr.CC, this.addData, '6304'].join('');
-
     return `${content}${VietQr.calcCrc(content)}`;
   }
 
-  /**
-   * Generates a data URL for the QR code
-   * @returns Promise resolving to the QR code data URL
-   */
-  public async getQrDataUrl(): Promise<string> {
-    return qrcode.toDataURL(this.getQr());
+  public async getQrDataUrl(options: QRCodeToDataURLOptions): Promise<string> {
+    return qrcode.toDataURL(this.getQrContent(), { width: 250, ...options });
+  }
+
+  private detectUrlType(url: string): 'url' | 'base64' | undefined {
+    if (/^data:image\/png;base64,/.test(url)) return 'base64';
+    if (z.string().url().safeParse(url).success) return 'url';
+    return undefined;
+  }
+
+  public async getQrWithLogo(qrCodeOptions: QRCodeToBufferOptions, logoOptions: QrCodeLogoOptions): Promise<string> {
+    const qrImage = await Jimp.read(await qrcode.toBuffer(this.getQrContent(), { width: 250, ...qrCodeOptions }));
+
+    const logoSrc = logoOptions.src;
+    const logoType = this.detectUrlType(logoSrc);
+    if (!logoType) throw new Error('Invalid logo source');
+
+    const logoImage = await Jimp.read(logoType === 'url' ? logoSrc : Buffer.from(logoSrc.split(',')[1]!, 'base64'));
+    const logoRatio = logoImage.bitmap.height / logoImage.bitmap.width;
+    const logoWidth = Math.min(logoOptions.size?.w ?? qrImage.bitmap.width * 0.2, qrImage.bitmap.width * 0.2);
+    const logoHeight = logoOptions.size?.h ?? Math.round(logoWidth * logoRatio);
+    logoImage.resize({ w: logoWidth, h: logoHeight });
+
+    // Center the logo in the QR code
+    const x = qrImage.bitmap.width / 2 - logoWidth / 2;
+    const y = qrImage.bitmap.height / 2 - logoHeight / 2;
+
+    if (!logoOptions.backgroundColor) {
+      qrImage.composite(logoImage, x, y);
+    } else {
+      const backgroundImage = new Jimp({ width: logoWidth, height: logoHeight, color: logoOptions.backgroundColor });
+      backgroundImage.composite(logoImage, 0, 0);
+      qrImage.composite(backgroundImage, x, y);
+    }
+
+    return qrImage.getBase64('image/png');
   }
 }
 

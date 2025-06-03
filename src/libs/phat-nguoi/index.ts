@@ -2,83 +2,38 @@ import { z } from 'zod';
 import qs from 'qs';
 import { createWorker } from 'tesseract.js';
 import { parse } from 'node-html-parser';
-import Logger from './logger';
-import Request from './request';
-import Utils from '../utils';
-
-const config = {
-  baseUrl: 'https://www.csgt.vn',
-  captchaUrl: '/lib/captcha/captcha.class.php',
-  finesUrl: '/?mod=contact&task=tracuu_post&ajax',
-  headers: {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-    'content-type': 'text/html; charset=UTF-8',
-  },
-  maxRetries: 5,
-};
+import Logger from '../logger';
+import Request from '../request';
+import Utils from '../../utils';
+import { config, PARSE_FINES_URL_RESPONSE_DATA_KEYS } from './config';
+import type { VehicleType, ResolverCaptchaResponse, GetFinesUrlResponse, ParseFinesUrlResponse, ParseFinesUrlResponseData, CheckResponse } from './types';
 
 const PhatNguoiSchema = z.object({
   plate: z.string().min(1, 'Plate is required').max(10, 'Plate must be at most 10 characters'),
   vehicleType: z.enum(['1', '2']).optional(),
 });
 
-type PhatNguoiConfig = z.infer<typeof PhatNguoiSchema>;
-
-type VehicleType = '1' | '2';
-
-type ResolverCaptchaResponse = {
-  sessionId?: string;
-  captcha?: string;
-};
-
-type GetFinesUrlResponse = {
-  url?: string;
-  sessionId?: string;
-};
-
-const PARSE_FINES_URL_RESPONSE_DATA_KEYS = [
-  'plate',
-  'plateColor',
-  'vehicleType',
-  'violationTime',
-  'location',
-  'violationType',
-  'status',
-  'detectingUnit',
-] as const;
-
-type ParseFinesUrlResponseDataKey = (typeof PARSE_FINES_URL_RESPONSE_DATA_KEYS)[number];
-
-type ParseFinesUrlResponseData = {
-  [K in ParseFinesUrlResponseDataKey]: string;
-} & {
-  resolvingUnit?: string[];
-};
-
-type ParseFinesUrlResponse = {
-  retry: boolean;
-  data: ParseFinesUrlResponseData[];
-};
-
-type CheckResponse = {
-  error: boolean;
-  message?: string;
-  data?: ParseFinesUrlResponseData[];
-};
+type PhatNguoiRequest = z.infer<typeof PhatNguoiSchema>;
 
 class PhatNguoi {
-  private logger: Logger;
   private request: Request;
   private worker?: Awaited<ReturnType<typeof createWorker>>;
 
   constructor(private readonly isDebug: boolean = true) {
-    this.logger = new Logger('phat-nguoi');
     this.request = new Request(config.baseUrl, config.headers, this.isDebug);
-    this.initWorker();
   }
 
   private async initWorker() {
-    this.worker = await createWorker('eng');
+    if (!this.worker) {
+      this.worker = await createWorker('eng');
+      Logger.info('Worker initialized');
+    }
+  }
+
+  private async ensureWorker() {
+    if (!this.worker) {
+      await this.initWorker();
+    }
   }
 
   private cleanPlate(plate: string): string {
@@ -86,7 +41,7 @@ class PhatNguoi {
   }
 
   private detectVehicleType(plate: string): VehicleType {
-    return plate.length === 8 ? '1' : '2';
+    return plate.length === 8 ? '1' : /^\d{2}(LD|DA)\d{4,6}$/.test(plate) ? '1' : '2';
   }
 
   private isValidCaptcha(captcha: string): boolean {
@@ -121,9 +76,7 @@ class PhatNguoi {
 
     captcha = Buffer.from(captcha);
 
-    if (!this.worker) {
-      await this.initWorker();
-    }
+    await this.ensureWorker();
 
     const ret = await this.worker?.recognize(captcha);
 
@@ -133,20 +86,16 @@ class PhatNguoi {
   private async resolverCaptchaRetry() {
     return Utils.retryWrapper<ResolverCaptchaResponse>({
       fn: () => this.resolverCaptcha(),
-      validateFn: async result => {
-        const { sessionId, captcha } = result || {};
-        return !!sessionId && typeof captcha === 'string' && this.isValidCaptcha(captcha);
-      },
+      validateFn: async ({ sessionId, captcha } = {}) => !!sessionId && typeof captcha === 'string' && this.isValidCaptcha(captcha),
       maxRetries: config.maxRetries,
     });
   }
 
-  private async getFinesUrl(cfg: PhatNguoiConfig): Promise<GetFinesUrlResponse> {
+  private async getFinesUrl(cfg: PhatNguoiRequest): Promise<GetFinesUrlResponse> {
     const result = await this.resolverCaptchaRetry();
     if (!result) return {};
 
     const { sessionId, captcha } = result;
-
     const response = await this.request.send<{ href?: string }>({
       url: config.finesUrl,
       method: 'post',
@@ -167,13 +116,10 @@ class PhatNguoi {
     return { url: response?.href, sessionId };
   }
 
-  private async getFinesUrlRetry(cfg: PhatNguoiConfig) {
+  private async getFinesUrlRetry(cfg: PhatNguoiRequest) {
     return Utils.retryWrapper<GetFinesUrlResponse>({
-      fn: this.getFinesUrl.bind(this, cfg),
-      validateFn: async result => {
-        const { url, sessionId } = result || {};
-        return !!sessionId && !!url && this.isValidFinesUrl(url);
-      },
+      fn: () => this.getFinesUrl(cfg),
+      validateFn: async ({ url, sessionId } = {}) => !!sessionId && !!url && this.isValidFinesUrl(url),
       maxRetries: config.maxRetries,
     });
   }
@@ -225,26 +171,31 @@ class PhatNguoi {
 
   private async parseFinesUrlRetry(url: string, sessionId: string) {
     return Utils.retryWrapper<ParseFinesUrlResponse>({
-      fn: this.parseFinesUrl.bind(this, url, sessionId),
-      validateFn: async result => {
-        const { retry } = result || {};
-        return !retry;
-      },
+      fn: () => this.parseFinesUrl(url, sessionId),
+      validateFn: async ({ retry } = { retry: true, data: [] }) => !retry,
       maxRetries: config.maxRetries,
     });
   }
 
-  async check(cfg: PhatNguoiConfig, format: 'html' | 'json' = 'html'): Promise<CheckResponse | string> {
+  async check(cfg: PhatNguoiRequest, format: 'html' | 'json' = 'html'): Promise<CheckResponse | string> {
     PhatNguoiSchema.parse(cfg);
 
     const plate = this.cleanPlate(cfg.plate);
-    const vehicleType = this.detectVehicleType(plate);
+    const vehicleType = cfg.vehicleType ?? this.detectVehicleType(plate);
 
     const result = await this.getFinesUrlRetry({ plate, vehicleType });
-    if (!result || !result.url || !result.sessionId) return { error: true, message: 'Can not get fines url or session id' };
+    if (!result || !result.url || !result.sessionId)
+      return {
+        error: true,
+        message: 'Can not get fines url or session id',
+      };
 
     const finesData = await this.parseFinesUrlRetry(result.url, result.sessionId);
-    if (!finesData) return { error: true, message: 'Can not get fines data' };
+    if (!finesData)
+      return {
+        error: true,
+        message: 'Can not get fines data',
+      };
 
     const jsonResponse = { error: false, data: finesData.data };
 
@@ -271,14 +222,11 @@ class PhatNguoi {
   - Đơn vị giải quyết: ${item.resolvingUnit?.join(', ')}
 `;
     });
-
-    return `Biển số xe ${plate} có ${jsonResponse.data.length} vi phạm giao thông.
-    ${result.join('\n')}
-    `;
+    return `Biển số xe ${plate} có ${jsonResponse.data.length} vi phạm giao thông.${result.join('\n')}`;
   }
 }
 
 export default PhatNguoi;
-
 const phatNguoi = new PhatNguoi();
-phatNguoi.check({ plate: '51L40065', vehicleType: '1' }).then(console.log);
+
+Logger.info(`${await phatNguoi.check({ plate: '37LD00097' })}`);

@@ -16,12 +16,9 @@ type RequestConfig = {
 };
 
 export default class Request {
-  private logger: Logger;
   private axiosInstance: AxiosInstance;
 
   constructor(private readonly baseUrl: string, private readonly headers: Record<string, unknown> = {}, private readonly isDebug: boolean = true) {
-    this.logger = new Logger('request');
-
     this.axiosInstance = axios.create({
       baseURL: this.baseUrl,
       headers: this.headers,
@@ -32,9 +29,9 @@ export default class Request {
         const { command } = req;
         const reqId = req?.object?.request?.headers?.['x-custom-req-id'];
         if (error) {
-          this.logger.error(error, `reqId_${reqId} error: ${error.stack}`);
+          Logger.error(error, `reqId_${reqId} error: ${error.stack}`);
         } else {
-          this.logger.info(`reqId_${reqId}, ${command}`);
+          Logger.info(`reqId_${reqId}, ${command}`);
         }
       });
     }
@@ -57,11 +54,11 @@ export default class Request {
 
       const results = keepRawResponse ? response : response.data;
 
-      this.logger.info(`reqId_${reqId} done${logResponse ? `, data: ${JSON.stringify(results)}` : ''}`);
+      this.isDebug && Logger.info(`reqId_${reqId} done${logResponse ? `, data: ${JSON.stringify(results)}` : ''}`);
 
       return results as T;
     } catch (error: any) {
-      this.logger.error(`reqId_${reqId} error: ${error.stack}`);
+      this.isDebug && Logger.error(`reqId_${reqId} error: ${error.stack}`);
       return null;
     }
   }

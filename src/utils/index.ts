@@ -1,6 +1,4 @@
-import Logger from '../libs/logger';
-
-const logger = new Logger('utils');
+import logger from '../libs/logger';
 
 type RetryWrapperConfig<T> = {
   fn: () => Promise<T>;
