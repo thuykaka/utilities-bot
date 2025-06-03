@@ -2,9 +2,7 @@ import { z } from 'zod';
 import qs from 'qs';
 import { createWorker } from 'tesseract.js';
 import { parse } from 'node-html-parser';
-import Logger from '../logger';
-import Request from '../request';
-import Utils from '../../utils';
+import { Utils, Request, Logger } from '../../utils';
 import { config, PARSE_FINES_URL_RESPONSE_DATA_KEYS } from './config';
 import type { VehicleType, ResolverCaptchaResponse, GetFinesUrlResponse, ParseFinesUrlResponse, ParseFinesUrlResponseData, CheckResponse } from './types';
 
@@ -26,7 +24,7 @@ class PhatNguoi {
   private async initWorker() {
     if (!this.worker) {
       this.worker = await createWorker('eng');
-      Logger.info('Worker initialized');
+      this.isDebug && Logger.info('Worker initialized');
     }
   }
 
@@ -37,7 +35,7 @@ class PhatNguoi {
   }
 
   private cleanPlate(plate: string): string {
-    return plate.replace(/[^a-z0-9]/gi, '');
+    return plate.replace(/[^a-z0-9]/gi, '').toUpperCase();
   }
 
   private detectVehicleType(plate: string): VehicleType {
@@ -88,6 +86,7 @@ class PhatNguoi {
       fn: () => this.resolverCaptcha(),
       validateFn: async ({ sessionId, captcha } = {}) => !!sessionId && typeof captcha === 'string' && this.isValidCaptcha(captcha),
       maxRetries: config.maxRetries,
+      debug: this.isDebug,
     });
   }
 
@@ -121,6 +120,7 @@ class PhatNguoi {
       fn: () => this.getFinesUrl(cfg),
       validateFn: async ({ url, sessionId } = {}) => !!sessionId && !!url && this.isValidFinesUrl(url),
       maxRetries: config.maxRetries,
+      debug: this.isDebug,
     });
   }
 
@@ -174,6 +174,7 @@ class PhatNguoi {
       fn: () => this.parseFinesUrl(url, sessionId),
       validateFn: async ({ retry } = { retry: true, data: [] }) => !retry,
       maxRetries: config.maxRetries,
+      debug: this.isDebug,
     });
   }
 
@@ -227,6 +228,3 @@ class PhatNguoi {
 }
 
 export default PhatNguoi;
-const phatNguoi = new PhatNguoi();
-
-Logger.info(`${await phatNguoi.check({ plate: '37LD00097' })}`);

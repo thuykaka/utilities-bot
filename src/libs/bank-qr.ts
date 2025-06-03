@@ -356,6 +356,10 @@ class VietQr {
     return qrcode.toDataURL(this.getQrContent(), { width: 250, ...options });
   }
 
+  public async getQrBuffer(options: QRCodeToBufferOptions): Promise<Buffer> {
+    return qrcode.toBuffer(this.getQrContent(), { width: 250, ...options });
+  }
+
   private detectUrlType(url: string): 'url' | 'base64' | undefined {
     if (/^data:image\/png;base64,/.test(url)) return 'base64';
     if (z.string().url().safeParse(url).success) return 'url';

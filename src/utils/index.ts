@@ -1,4 +1,5 @@
-import logger from '../libs/logger';
+import logger from './logger';
+import Request from './request';
 
 type RetryWrapperConfig<T> = {
   fn: () => Promise<T>;
@@ -9,7 +10,7 @@ type RetryWrapperConfig<T> = {
   debug?: boolean;
 };
 
-export default class Utils {
+class Utils {
   public static sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
@@ -27,10 +28,10 @@ export default class Utils {
       try {
         fnResponse = await fn();
       } catch (err: any) {
-        if (debug) logger.error(`retryWrapper - ${fn.name} failed, error: ${err.stack}`);
+        debug && logger.error(`retryWrapper - ${fn.name} failed, error: ${err.stack}`);
       }
 
-      if (debug) logger.info(`retryWrapper - ${fn.name} response: ${typeof fnResponse === 'object' ? JSON.stringify(fnResponse) : fnResponse}`);
+      debug && logger.info(`retryWrapper - ${fn.name} response: ${typeof fnResponse === 'object' ? JSON.stringify(fnResponse) : fnResponse}`);
 
       if (await validateFn(fnResponse)) {
         shouldContinue = false;
@@ -39,7 +40,7 @@ export default class Utils {
         attempt++;
         await Utils.sleep(delay);
         if (onRetryCallback) await onRetryCallback();
-        logger.info(`retryWrapper - ${fn.name} retry ${attempt}/${maxRetries}`);
+        debug && logger.info(`retryWrapper - ${fn.name} retry ${attempt}/${maxRetries}`);
         shouldContinue = attempt < maxRetries;
       }
     } while (shouldContinue);
@@ -64,3 +65,5 @@ export default class Utils {
     return undefined;
   }
 }
+
+export { logger as Logger, Request, Utils };
