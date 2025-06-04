@@ -1,19 +1,11 @@
-import pino from 'pino';
+import { Signale } from 'signale';
 
 class AbstractLogger {
-  private readonly loggerInstance: ReturnType<typeof pino>;
+  private readonly loggerInstance: Signale;
 
   constructor(private readonly sv: string, private readonly color: boolean = false) {
-    this.loggerInstance = pino({
-      transport: {
-        target: 'pino-pretty',
-        options: {
-          translateTime: 'SYS:standard',
-          ignore: 'pid,hostname',
-          colorize: this.color,
-          messageFormat: `${this.sv} - {msg}`,
-        },
-      },
+    this.loggerInstance = new Signale({
+      scope: sv,
     });
   }
 

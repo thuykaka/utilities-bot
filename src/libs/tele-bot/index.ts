@@ -100,8 +100,12 @@ class TeleBot {
         await this.bot.sendMessage(msg.chat.id, `2FA code: ${code}`);
         break;
       case 'phatnguoi':
-        const result = (await this.phatNguoi.check({ plate: text })) as string;
-        await this.bot.sendMessage(msg.chat.id, result, { parse_mode: 'HTML' });
+        try {
+          const result = (await this.phatNguoi.check({ plate: text })) as string;
+          await this.bot.sendMessage(msg.chat.id, result, { parse_mode: 'HTML' });
+        } catch (error) {
+          this.bot.sendMessage(msg.chat.id, `Có lỗi xảy ra khi kiểm tra phạt nguội. Bạn có thể thử lại sau hoặc cung cấp một biển số khác để tôi kiểm tra.`);
+        }
         break;
       case 'bankqr':
         const [accNo, bankBin, amt, ...descArr] = text.split(' ') as [string, string, string, string];
@@ -153,7 +157,11 @@ class TeleBot {
     });
 
     this.bot.on('message', async msg => {
-      await this.handleUserAction(msg);
+      try {
+        await this.handleUserAction(msg);
+      } catch (error) {
+        this.bot.sendMessage(msg.chat.id, `Có lỗi xảy ra khi xử lý lệnh. Bạn có thể thử lại sau hoặc cung cấp một lệnh khác để tôi xử lý.`);
+      }
     });
   }
 }

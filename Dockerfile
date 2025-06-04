@@ -12,21 +12,15 @@ COPY ./src ./src
 
 ENV NODE_ENV=production
 
-RUN bun build \
-	--compile \
-	--minify
-	--target bun \
-	--outfile server \
-	./src/index.ts
+RUN bun build --compile --external tesseract.js --minify-whitespace --minify-syntax --target bun --outfile server ./src/index.ts
 
 FROM gcr.io/distroless/base
 
 WORKDIR /app
 
+COPY --from=build /app/node_modules node_modules
 COPY --from=build /app/server server
 
 ENV NODE_ENV=production
 
 CMD ["./server"]
-
-EXPOSE 3000
