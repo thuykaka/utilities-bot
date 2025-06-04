@@ -15,6 +15,11 @@ class Utils {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
+  public static parseStringEnvToArrayNumber(env?: string) {
+    if (!env) return [];
+    return env.split(',').map(Number);
+  }
+
   public static async retryWrapper<T>(cfg: RetryWrapperConfig<T>): Promise<T | undefined> {
     const { fn, validateFn, onRetryCallback, maxRetries = 3, delay = 1000, debug = true } = cfg;
 
