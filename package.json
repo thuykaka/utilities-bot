@@ -36,9 +36,5 @@
     "ssh2": "^1.16.0",
     "tesseract.js": "^6.0.1",
     "zod": "^3.25.46"
-  },
-  "signale": {
-    "displayTimestamp": true,
-    "displayDate": true
   }
 }

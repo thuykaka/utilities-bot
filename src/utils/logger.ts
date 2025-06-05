@@ -6,6 +6,10 @@ class AbstractLogger {
   constructor(private readonly sv: string, private readonly color: boolean = false) {
     this.loggerInstance = new Signale({
       scope: this.sv,
+      config: {
+        displayTimestamp: true,
+        displayDate: true,
+      },
     });
   }
 

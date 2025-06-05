@@ -12,7 +12,7 @@ COPY ./src ./src
 
 ENV NODE_ENV=production
 
-RUN bun build --compile --external tesseract.js --minify-whitespace --minify-syntax --target bun --outfile server ./src/index.ts
+RUN bun build --compile --external tesseract.js ssh2 --minify-whitespace --minify-syntax --target bun --outfile server ./src/index.ts
 
 FROM gcr.io/distroless/base
 
