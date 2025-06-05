@@ -4,6 +4,7 @@ import { Logger } from '../../utils';
 import { TOTP } from '../2fa-otp';
 import PhatNguoi from '../phat-nguoi';
 import { VietQr } from '../bank-qr';
+import SSHClient from '../ssh';
 
 type UserAction = '2fa' | 'bankqr' | 'phatnguoi' | 'ssh';
 
@@ -11,6 +12,7 @@ class TeleBot {
   private bot: TelegramBot;
   private phatNguoi: PhatNguoi;
   private mapUserAction: Map<number, UserAction> = new Map();
+  private mapUserSSH: Map<number, SSHClient> = new Map();
 
   private readonly BOT_MENUS: TelegramBot.BotCommand[] = [
     { command: 'help', description: 'Help' },
@@ -76,6 +78,12 @@ class TeleBot {
     this.mapUserAction.set(userId, 'bankqr');
   }
 
+  private async sendSSHMessage(msg: TelegramBot.Message) {
+    await this.bot.sendMessage(msg.chat.id, GUIDE.ssh1, { parse_mode: 'Markdown' });
+    const userId = this.getUserSenderId(msg);
+    this.mapUserAction.set(userId, 'ssh');
+  }
+
   private async handleUserAction(msg: TelegramBot.Message) {
     const text = msg.text;
     Logger.info(`handleUserAction - text: ${text}`);
@@ -118,6 +126,70 @@ class TeleBot {
           await this.bot.sendMessage(msg.chat.id, `Error generating bank QR code`);
         }
         break;
+      case 'ssh':
+        const currentConnection = this.mapUserSSH.get(userId);
+
+        if (currentConnection) {
+          if (/^\$ exit$/gim.test(text)) {
+            currentConnection.disconnect();
+            this.mapUserSSH.delete(userId);
+            await this.bot.sendMessage(msg.chat.id, `Disconnected from server`);
+            return;
+          }
+
+          if (/^ssh\s+([^@]+)@([^\s]+)\s+-p\s+([^\s]+)(?:\s+-port\s+(\d+))?$/gim.test(text)) {
+            currentConnection.disconnect();
+            const newConnection = new SSHClient();
+            try {
+              const connectResult = await newConnection.connect(text);
+              this.mapUserSSH.set(userId, newConnection);
+              await this.bot.sendMessage(msg.chat.id, connectResult);
+            } catch (error: any) {
+              await this.bot.sendMessage(msg.chat.id, error.message);
+            }
+
+            return;
+          }
+
+          if (/^\$\s?(.*)$/gim.test(text)) {
+            const command = text.replace(/^\$\s?/gim, '');
+            try {
+              const execResult = await currentConnection.exec(command);
+              if (execResult.stderr) {
+                await this.bot.sendMessage(msg.chat.id, `Exec error:\n ${execResult.stderr}`, { parse_mode: 'HTML' });
+              } else {
+                await this.bot.sendMessage(msg.chat.id, `Exec completed:\n ${execResult.stdout}`, { parse_mode: 'HTML' });
+              }
+            } catch (error: any) {
+              await this.bot.sendMessage(msg.chat.id, error.message);
+            }
+
+            return;
+          }
+
+          await this.bot.sendMessage(msg.chat.id, GUIDE.ssh2, { parse_mode: 'Markdown' });
+        } else {
+          if (/^\$ exit$/gim.test(text)) {
+            await this.bot.sendMessage(msg.chat.id, `You are not connected to any server, please connect to a server first!`);
+            return;
+          }
+
+          if (/^ssh\s+([^@]+)@([^\s]+)\s+-p\s+([^\s]+)(?:\s+-port\s+(\d+))?$/gim.test(text)) {
+            const newConnection = new SSHClient();
+            try {
+              const connectResult = await newConnection.connect(text);
+              this.mapUserSSH.set(userId, newConnection);
+              await this.bot.sendMessage(msg.chat.id, connectResult);
+            } catch (error: any) {
+              await this.bot.sendMessage(msg.chat.id, error.message);
+            }
+
+            return;
+          }
+
+          await this.bot.sendMessage(msg.chat.id, GUIDE.ssh1, { parse_mode: 'Markdown' });
+        }
+        break;
       default:
         break;
     }
@@ -142,6 +214,10 @@ class TeleBot {
 
     this.bot.onText(/\/bankqr$/, async msg => {
       await this.sendBankQrMessage(msg);
+    });
+
+    this.bot.onText(/\/ssh$/, async msg => {
+      await this.sendSSHMessage(msg);
     });
 
     this.bot.onText(/\/cancel$/, async msg => {

@@ -17,5 +17,6 @@ I'm a bot that can help you with available commands:
   _2fa: `Enter the secret key to generate 2FA code`,
   phatnguoi: `Vui lòng nhập biển số xe để kiểm tra phạt nguội từ csgt.vn`,
   bankqr: `Nhập theo cú pháp BANK\\_ACCOUNT BANK\\_BIN(or BANK\\_NAME) AMOUNT DESCRIPTION (max 50 characters)`,
-  ssh: `Use \`/ssh USER@HOST\` to SSH to remote server`,
+  ssh1: `Enter the command to connect to remote server: ssh user@ip -p password -port port`,
+  ssh2: `Enter the command to execute on remote server: $ command (example: $ ls), enter the command to disconnect: $ exit`,
 };

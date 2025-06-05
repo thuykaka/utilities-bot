@@ -5,7 +5,7 @@ class AbstractLogger {
 
   constructor(private readonly sv: string, private readonly color: boolean = false) {
     this.loggerInstance = new Signale({
-      scope: sv,
+      scope: this.sv,
     });
   }
 
