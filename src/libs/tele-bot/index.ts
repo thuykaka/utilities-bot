@@ -130,7 +130,7 @@ class TeleBot {
         const currentConnection = this.mapUserSSH.get(userId);
 
         if (currentConnection) {
-          if (/^\$ exit$/gim.test(text)) {
+          if (/^\$\s?exit$/gim.test(text)) {
             currentConnection.disconnect();
             this.mapUserSSH.delete(userId);
             await this.bot.sendMessage(msg.chat.id, `Disconnected from server`);
@@ -169,7 +169,7 @@ class TeleBot {
 
           await this.bot.sendMessage(msg.chat.id, GUIDE.ssh2, { parse_mode: 'Markdown' });
         } else {
-          if (/^\$ exit$/gim.test(text)) {
+          if (/^\$\s?exit$/gim.test(text)) {
             await this.bot.sendMessage(msg.chat.id, `You are not connected to any server, please connect to a server first!`);
             return;
           }
