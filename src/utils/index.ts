@@ -69,6 +69,10 @@ class Utils {
 
     return undefined;
   }
+
+  public static removeStringSpaces(str: string) {
+    return str.replace(/\s/g, '');
+  }
 }
 
 export { logger as Logger, Request, Utils };
