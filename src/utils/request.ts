@@ -58,7 +58,7 @@ export default class Request {
 
       return results as T;
     } catch (error: any) {
-      this.isDebug && Logger.error(`reqId_${reqId} error: ${error.stack}`);
+      this.isDebug && Logger.error(`reqId_${reqId} error: ${error.message}, stack: ${error.stack}`);
       return null;
     }
   }
